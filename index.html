@@ -1,0 +1,700 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Deep Space Tracker</title>
+    <style>
+        :root {
+            --bg-color: #0a0a0f;
+            --text-color: #00ff88;
+            --dim-color: #006644;
+            --accent-color: #00ffff;
+            --warning-color: #ffaa00;
+            --error-color: #ff4444;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Fira Code', 'JetBrains Mono', 'Consolas', monospace;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            padding: 20px;
+            line-height: 1.4;
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 950px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            text-align: center;
+            margin-bottom: 20px;
+            font-weight: normal;
+            letter-spacing: 4px;
+        }
+
+        .ascii-box {
+            white-space: pre;
+            font-size: 13px;
+            margin-bottom: 20px;
+            overflow-x: auto;
+        }
+
+        .section-title {
+            color: var(--accent-color);
+            margin-bottom: 10px;
+            font-size: 12px;
+            letter-spacing: 2px;
+        }
+
+        .highlight { color: var(--accent-color); }
+        .dim { color: var(--dim-color); }
+        .warning { color: var(--warning-color); }
+        .error { color: var(--error-color); }
+        .status-active { color: #00ff00; }
+        
+        a {
+            color: var(--accent-color);
+            text-decoration: none;
+        }
+        
+        a:hover {
+            text-decoration: underline;
+        }
+
+        /* Tab Navigation */
+        .tabs {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0;
+            margin-bottom: 20px;
+            border-bottom: 1px solid var(--dim-color);
+        }
+
+        .tab {
+            padding: 8px 14px;
+            cursor: pointer;
+            color: var(--dim-color);
+            border: 1px solid transparent;
+            border-bottom: none;
+            background: transparent;
+            font-family: inherit;
+            font-size: 12px;
+            transition: all 0.2s;
+        }
+
+        .tab:hover { color: var(--text-color); }
+
+        .tab.active {
+            color: var(--accent-color);
+            border-color: var(--dim-color);
+            border-bottom: 1px solid var(--bg-color);
+            margin-bottom: -1px;
+            background: var(--bg-color);
+        }
+
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+
+        .card {
+            background: rgba(0, 255, 136, 0.03);
+            border: 1px solid rgba(0, 255, 136, 0.2);
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+
+        .loading {
+            animation: pulse 1.5s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        footer {
+            text-align: center;
+            margin-top: 40px;
+            font-size: 12px;
+            color: var(--dim-color);
+        }
+
+        .data-source {
+            text-align: center;
+            margin-bottom: 20px;
+            font-size: 11px;
+            color: var(--dim-color);
+        }
+
+        .data-source.live { color: var(--text-color); }
+
+        @media (max-width: 700px) {
+            .ascii-box { font-size: 10px; }
+            .tab { padding: 6px 10px; font-size: 11px; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>▲ DEEP SPACE TRACKER ▲</h1>
+        
+        <div class="data-source" id="data-source">◎ Connecting to JPL Horizons...</div>
+
+        <!-- Tab Navigation -->
+        <div class="tabs" id="tab-nav"></div>
+
+        <!-- Tab Contents (generated dynamically) -->
+        <div id="tab-contents"></div>
+
+        <footer>Data from NASA/JPL Horizons • Auto-updates every 60s</footer>
+    </div>
+
+    <script>
+        // ASCII art for each spacecraft (pre-generated from images)
+        const spacecraftAscii = {
+            voyager1: `$$$$$$},i-"II   nrz((|{0$@$$$$$$$$$$$$$$$$$$$$$$$$
+$$$$$$-"~)}?<lliz/x}11]Q$@$$$$$$$$$$$$$$$$$$$$$$$$
+$$$$$$~ .^I.>);!kbp}-?~J$@$$$$$$$$$$$$$$$$$$$$$$$$
+$$$$$$>    ",:'c$$$m><!X@@@@$$$$$$$$$$$$$$$$$$$$$$
+$$$$$$i   ^?l [$$$$$Yjfp$$$$$$$$$$$$$$$$$$$$$$$$$$
+$$$$$$f '.  . n*aB88d[irdpdpbh**MWMB$$$$$$$$$$$$$$
+$$$$$$~ ' ",, coh&M8Li'. '\`I,,"^<}>p$@$$$$$$$$$$$$
+$$$$$$i   I-^ f$$@$B{-[tm0t[;,^\`>[ip$@$$$$$$$$$$$$
+$$$$$$>     .',a$$$n,l?L$a/?;:^\`>[>p$@$$$$$$$$$$$$
+@@@@@@i    ^"l^f$B%x.\`"(pZj[I:^\`>[>q@@@@@@@@$$$$$@
+$$$$$$<    .    n@%Y   \\+ ,l,"^\`>[ik$$$$$$$$$$$$$$`,
+            voyager2: `$$$$$$},i-"II   nrz((|{0$@$$$$$$$$$$$$$$$$$$$$$$$$
+$$$$$$-"~)}?<lliz/x}11]Q$@$$$$$$$$$$$$$$$$$$$$$$$$
+$$$$$$~ .^I.>);!kbp}-?~J$@$$$$$$$$$$$$$$$$$$$$$$$$
+$$$$$$>    ",:'c$$$m><!X@@@@$$$$$$$$$$$$$$$$$$$$$$
+$$$$$$i   ^?l [$$$$$Yjfp$$$$$$$$$$$$$$$$$$$$$$$$$$
+$$$$$$f '.  . n*aB88d[irdpdpbh**MWMB$$$$$$$$$$$$$$
+$$$$$$~ ' ",, coh&M8Li'. '\`I,,"^<}>p$@$$$$$$$$$$$$
+$$$$$$i   I-^ f$$@$B{-[tm0t[;,^\`>[ip$@$$$$$$$$$$$$
+$$$$$$>     .',a$$$n,l?L$a/?;:^\`>[>p$@$$$$$$$$$$$$
+@@@@@@i    ^"l^f$B%x.\`"(pZj[I:^\`>[>q@@@@@@@@$$$$$@
+$$$$$$<    .    n@%Y   \\+ ,l,"^\`>[ik$$$$$$$$$$$$$$`,
+            newhorizons: `",\`^  -Yt      _LJLx1[Ut\\\\f~zc+,....    lw0m%$@$$$
+",\`^  -Yt      ,I<i,]1\\ui}\\>zc+,....    lw0m@$$$$$
+",\`^  -Yt     \` ^lI i[}Ympc{zu+,  ..    lw0Z*hm#Ma
+",\`^  -Yt     ,l\\fcxffO&$oowtjX[~.      lw0OZu_Omz
+",\`^  -Yt    i~/ucXJC)tB@zwJ)hz\\j(,     lw0Owz[ZwU
+",\`^  -Yt    I}JYUYYY[n$8_v1tWn/fj\\,    lw0Omz]ZwY
+",\`^  -Yj:\`   (Jcuunnxmh&t@d{Bw///f|\`   lw0Omz]ZwY
+",\`^  -unx0}. !I^'::";:/$8B1-$$kzj/t- . ;w0Omz]ZwY
+",\`^  \`^^"/Yl     \`\.  |qLc-^~$$$BaOXz!  |q0Omz]ZwY
+",\`^       '. '' "  .^>'   ,:W$@$$%obX)/Ld0Owc?OqU
+",\`^  '''''."::i;^"I;\`  ..';,p$$$$$$B%OawcwpZU1wOz
+",\`^     '. ,I<l<;_~: .   \`_!v$#M@@@@@hoOx(UcUu+i!
+",\`^      \`{{}|u/t~   ... \`li]@%wp$$$@%a8a]i",}\`\`"
+",\`^     .i+\\t)1{~.''..'.. '>IOB@B$$$@$0Uk1[<^{"\`+`,
+            juno: `$$$$$$$$$$$$$$$$$$$$$$$$$@Cj--&$$$$$$$$$$$$$$$$$$$
+$$$$$$$$$$$$$$$$$$$$$$@$B[  \`h$$$$$$$$$$$$$$$$$$$$
+$$$$$$$$$$$$$$$$$$$$$@$8+ .^k$@$$$$$$$$$$$$$$$$$$$
+$$$$$$$$$$$$$$$$$$@$$$M> .'w$@$$$$$$$$$$$$$$$$$$$$
+$$$$$$$$$$$$$$$$$$$$&o!  ^b$@$$$$$$$$$$$$$$$$$$$$$
+$$$$$$$$$$$$$$$$@&Cn(?:^Ia$$$$$@@@$$$$$$$$$$$$$$$$
+$$$$$$$$$$$$@@$$$z}?>{i."x0h8%$$$$$$$$$$$$$$$$$$$$
+$$$$$$$$$@$$$$$&O1!.",'     ,:>{nLk&$$$$@@$$$$$$$$
+$$$$$@@$$$$8wn-   <        .       ^I\\W$$$$@$$$$$$
+$$@$$$$$aC{\`  ,[Uo@Q<:!]1l   ^"''. .?vzcQm&$$$@$$$
+$$$$WZtl ^ I\\ZB$$$$$$&$$$@hY)l    "X@$$w. <0o$$$$$
+$oc-.  ^[Uh$$$$@@$$@$$$@@$$$$BkzfbLXn|+,  >YcuC*$$
+o' .+up%$$$$@@$$$$$$$$$$$$$@@$$$$$$$$*ZkbOLLCv?+1p
+|}LM$$$$@@$$$$$$$$$$$$$$$$$$$$$@@@@$$$$$$$$$$$$@vq`,
+            parker: `               ',>|Q*do0QwLQOzxcXQUYxYYqZqYc0m8$$$
+         '\`,l<_]|uzYQqqwU0OQUvYxxncuunzxcr]zZ0%$$$
+        .   .,+rwLucvJJCXZCr|jXvcjf/unc)xruU/n8$$$
+              l|OCYUtnQzLZX/X*W%ZYwctzcn/rcr]f8$$$
+             .+cmq0bJuuJYJZzW$$@omZzjfc/fuYf/fM$$$
+             .{wmkmZqwULndqQQpM$aYJ\\[|nuUYnccJM$$$
+            .\`\\oohwLdwmLj)>^\`\`~]zd*mzftvCYvcutW$$$
+            '^/M#M0dpZk0i    .I  j%WhQt[}uUzYn*$$$
+            .,/W#*kbOw0;    ..:"  -b$Wz)|uOOJxM$$$
+             ^-Zooaba#f{_".^\` '.\`" :QMk*QOp0zY&$$$
+              ;fLd*om)<-|\\]i:,;,\`:^ 1mdqOkOJYrW$$$
+               ~Juz1:}i"^()f(:;^^:^ijzJcdpOmJmhbbd
+             ^^1/-, +<+_{)/J(.:?)}_11naahdobLkMMqQ
+             i<{+:>uz|1txrJzY}/dWwu}\\Jook%8hCX8$Wq
+            I}u+i,I\\XvurYruL0\\JdqwcUJvzpqdkpbqobbk
+           \`:<rul-?,nQuunc0Z0n\\YzUUUYrz*OoW%*bZwQU
+          \`; .^^.I<?~[I)nuUOwUXYLQJxYCYmZbMWWbw*p*
+        ."i        .    "-fYUL0QCCYJZLCLdCpWW%%aB$
+      \`:::\`               \`;-|vQmpwwwmLOdmoWaopC0Y
+   .,::                      'I>]\\uXYvvncuj\\}~>I:
+ \`,:".                             ....\`\`\`.`,
+            bepicolombo: `.             .. /nu\\>-!;";_I^"li!<<_<i_+~?+~+~i!~
+                _c/r\\~<"^:I:'<}!;~_-]~_[_?]_-~i_?+
+               ,zr1\\)i,;I:<"~r/~<?+_{-[}?[]__+~?+>
+             . \\u\\}(-iI<>i++-]+<-]]_-+]}[}-_~?<{?l
+.             lLu)]11~<-<:I<>[~<[?]_--1{-]_??+<~~-
+       ...  '\`{\\+i~~}>![/uCp/>;Il-~-_+ili[?i+>>~>+
+          I-{+l',;lll[qM%@$\\.    \`)j1)?_)ft11[_-<<
+    .^vUuf/xrxfx\\_;l|%$$@$O""     >OwmOOQmt~!"~|?:
+     .-{rc1fructl, :W$@$@$x'?.    \`bdUYY0/   1|+rx
+         ww0LJXYUU[~$@$$@$U ["   .J80OZwcI'I\\|+]Md
+       . c$$$$$$Bhj-$@$$$$M:1'    YYjzc0)<\`k$)~1@o
+.   .  . ]#mk#M&8Ba:#$$$$$$ZI     f0jz/c[ .l{x_ >t
+        :tOa8$$$$$$-~aoM%@$$|     icftnYf  '>nUf?>
+          1CQm&%B%@U ?1ruYOd8x\`  . ?dt<~<>!>/QoO)+
+  .       ']tY*#h*ZY/cnr|]}/(cf>' 'zhpj|t]{fj1+I})
+         ifuuvnnOpZb0Xfnmt_|\\|uv/1(vr/x)Cjfu\\f1)f[
+        -xf/\\(/LohmddvfrJjxUOuzccYLOvznvCntvrxxcf(
+..    "(x/\\||u|C$Wob*mO0cUObdnzQZJJU0CYz0ncJUJUUzc
+     lzwQLLCJ( ^MB%W8oZmo*pOqmpkpdQL0vbUUCdmJaZOJm
+    _njtfruJ1 . [$%%&8*d#aqZdk#appJmqwqpqqbb0qp#0U
+  '1uffftjx! . . t$B8&WbM&OhaJa#ohkk*k#M#&W*Wbb*mL
+ ,tnffffnr:     . c$B%%a*&dk#o&Wo##MWb#%*w@Mh*#&#a
+?ccxrjfu/^  ..   . L$BB@%*khM*o%##*#a*o%%*M#wWh8W%
+>-}|fxv{            J$@@B@%%W*%88M*&&WW%MWM#b@k%M*
+     ',           .  v@@B@$$%B%&%88%8&%88%@MM&W@8p`
+        };
+
+        // Wikipedia URLs for each spacecraft
+        const wikipediaUrls = {
+            voyager1: "https://en.wikipedia.org/wiki/Voyager_1",
+            voyager2: "https://en.wikipedia.org/wiki/Voyager_2",
+            newhorizons: "https://en.wikipedia.org/wiki/New_Horizons",
+            juno: "https://en.wikipedia.org/wiki/Juno_(spacecraft)",
+            parker: "https://en.wikipedia.org/wiki/Parker_Solar_Probe",
+            bepicolombo: "https://en.wikipedia.org/wiki/BepiColombo"
+        };
+
+        // Spacecraft registry
+        const spacecraft = {
+            voyager1: {
+                id: "voyager1",
+                name: "VOYAGER 1",
+                symbol: "◆",
+                distance_au: 169.4,
+                distance_km: 25.33e9,
+                velocity_kms: 16.92,
+                velocity_au_yr: 3.57,
+                light_time_hours: 23.5,
+                launch_date: "1977-09-05",
+                ra: "17h 13m",
+                dec: "+12° 02'",
+                constellation: "Ophiuchus",
+                status: "TRANSMITTING",
+                destination: "Interstellar space",
+                data_rate_bps: 160,
+                hemisphere: "Northern",
+                milestones: [
+                    { year: 1977, event: "Launch (Sep 5)" },
+                    { year: 1979, event: "Jupiter flyby" },
+                    { year: 1980, event: "Saturn flyby" },
+                    { year: 2012, event: "Entered interstellar space", highlight: true }
+                ]
+            },
+            voyager2: {
+                id: "voyager2",
+                name: "VOYAGER 2",
+                symbol: "◇",
+                distance_au: 141.8,
+                distance_km: 21.21e9,
+                velocity_kms: 15.27,
+                velocity_au_yr: 3.22,
+                light_time_hours: 19.7,
+                launch_date: "1977-08-20",
+                ra: "19h 57m",
+                dec: "-57° 12'",
+                constellation: "Pavo",
+                status: "TRANSMITTING",
+                destination: "Interstellar space",
+                data_rate_bps: 160,
+                hemisphere: "Southern",
+                milestones: [
+                    { year: 1977, event: "Launch (Aug 20)" },
+                    { year: 1979, event: "Jupiter flyby" },
+                    { year: 1981, event: "Saturn flyby" },
+                    { year: 1986, event: "Uranus flyby (only spacecraft)" },
+                    { year: 1989, event: "Neptune flyby (only spacecraft)" },
+                    { year: 2018, event: "Entered interstellar space", highlight: true }
+                ]
+            },
+            newhorizons: {
+                id: "newhorizons",
+                name: "NEW HORIZONS",
+                symbol: "▸",
+                distance_au: 60.0,
+                distance_km: 9.0e9,
+                velocity_kms: 14.0,
+                velocity_au_yr: 2.95,
+                light_time_hours: 8.3,
+                launch_date: "2006-01-19",
+                ra: "20h 45m",
+                dec: "-22° 30'",
+                constellation: "Capricornus",
+                status: "TRANSMITTING",
+                destination: "Kuiper Belt",
+                data_rate_bps: 1000,
+                hemisphere: "Southern",
+                milestones: [
+                    { year: 2006, event: "Launch (Jan 19)" },
+                    { year: 2007, event: "Jupiter gravity assist" },
+                    { year: 2015, event: "Pluto flyby", highlight: true },
+                    { year: 2019, event: "Arrokoth flyby (farthest object visited)" }
+                ]
+            },
+            juno: {
+                id: "juno",
+                name: "JUNO",
+                symbol: "●",
+                distance_au: 5.2,
+                distance_km: 0.78e9,
+                velocity_kms: 20.0,
+                velocity_au_yr: 4.2,
+                light_time_hours: 0.72,
+                launch_date: "2011-08-05",
+                ra: "N/A",
+                dec: "N/A",
+                constellation: "Jupiter orbit",
+                status: "TRANSMITTING",
+                destination: "Jupiter system",
+                data_rate_bps: 18000,
+                hemisphere: "N/A",
+                milestones: [
+                    { year: 2011, event: "Launch (Aug 5)" },
+                    { year: 2013, event: "Earth gravity assist" },
+                    { year: 2016, event: "Jupiter orbit insertion", highlight: true },
+                    { year: 2021, event: "Extended mission (moon flybys)" }
+                ]
+            },
+            parker: {
+                id: "parker",
+                name: "PARKER SOLAR PROBE",
+                symbol: "☼",
+                distance_au: 0.5,
+                distance_km: 0.075e9,
+                velocity_kms: 150.0,
+                velocity_au_yr: 31.6,
+                light_time_hours: 0.07,
+                launch_date: "2018-08-12",
+                ra: "N/A",
+                dec: "N/A",
+                constellation: "Inner heliosphere",
+                status: "TRANSMITTING",
+                destination: "Sun corona",
+                data_rate_bps: 500000,
+                hemisphere: "N/A",
+                milestones: [
+                    { year: 2018, event: "Launch (Aug 12)" },
+                    { year: 2021, event: "First to touch the Sun", highlight: true },
+                    { year: 2024, event: "Closest perihelion (6.1M km)" },
+                    { year: 2025, event: "Record speed: 692,000 km/h" }
+                ]
+            },
+            bepicolombo: {
+                id: "bepicolombo",
+                name: "BEPICOLOMBO",
+                symbol: "☿",
+                distance_au: 0.8,
+                distance_km: 0.12e9,
+                velocity_kms: 40.0,
+                velocity_au_yr: 8.4,
+                light_time_hours: 0.11,
+                launch_date: "2018-10-20",
+                ra: "N/A",
+                dec: "N/A",
+                constellation: "Inner solar system",
+                status: "IN TRANSIT",
+                destination: "Mercury orbit",
+                data_rate_bps: 100000,
+                hemisphere: "N/A",
+                milestones: [
+                    { year: 2018, event: "Launch (Oct 20)" },
+                    { year: 2020, event: "Earth flyby" },
+                    { year: 2021, event: "Venus flybys (×2)" },
+                    { year: 2024, event: "Mercury flybys begin" },
+                    { year: 2026, event: "Mercury orbit insertion", highlight: true }
+                ]
+            }
+        };
+
+        let dataSource = "fallback";
+        let lastUpdate = null;
+
+        // Build tabs and content areas dynamically
+        function buildUI() {
+            const tabNav = document.getElementById('tab-nav');
+            const tabContents = document.getElementById('tab-contents');
+            
+            // Overview tab
+            tabNav.innerHTML = `<button class="tab active" data-tab="overview">◈ OVERVIEW</button>`;
+            
+            // Add tab for each spacecraft
+            Object.values(spacecraft).forEach(sc => {
+                tabNav.innerHTML += `<button class="tab" data-tab="${sc.id}">${sc.symbol} ${sc.name.split(' ')[0]}</button>`;
+            });
+            
+            // Overview content
+            tabContents.innerHTML = `
+                <div class="tab-content active" id="tab-overview">
+                    <div class="section-title">◆ SPACECRAFT DISTANCES (LOG SCALE)</div>
+                    <div class="ascii-box" id="distance-scale"></div>
+                    <div class="section-title">◆ VELOCITY COMPARISON</div>
+                    <div class="ascii-box" id="velocity"></div>
+                    <div class="section-title">◆ MISSION STATUS</div>
+                    <div class="ascii-box" id="status-grid"></div>
+                </div>
+            `;
+            
+            // Individual spacecraft tabs
+            Object.values(spacecraft).forEach(sc => {
+                tabContents.innerHTML += `
+                    <div class="tab-content" id="tab-${sc.id}">
+                        <div class="card">
+                            <div class="ascii-box" id="dashboard-${sc.id}">Loading...</div>
+                        </div>
+                        <div class="section-title">◆ MISSION TIMELINE</div>
+                        <div class="ascii-box" id="timeline-${sc.id}"></div>
+                    </div>
+                `;
+            });
+            
+            // Add tab click handlers
+            document.querySelectorAll('.tab').forEach(tab => {
+                tab.addEventListener('click', () => {
+                    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+                    tab.classList.add('active');
+                    const tabId = tab.dataset.tab;
+                    document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+                    document.getElementById(`tab-${tabId}`).classList.add('active');
+                });
+            });
+        }
+
+        // Fetch data from API
+        async function fetchData() {
+            try {
+                const response = await fetch('/api/all');
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                const data = await response.json();
+                
+                // Update each spacecraft with live data
+                Object.keys(spacecraft).forEach(key => {
+                    if (data[key] && !data[key].error) {
+                        spacecraft[key].distance_au = data[key].distance_au;
+                        spacecraft[key].distance_km = data[key].distance_km;
+                        spacecraft[key].velocity_kms = data[key].total_velocity_kms;
+                        spacecraft[key].velocity_au_yr = data[key].total_velocity_au_yr;
+                        spacecraft[key].light_time_hours = data[key].light_time_hours;
+                    }
+                });
+                
+                dataSource = "live";
+                lastUpdate = data.timestamp;
+                return true;
+            } catch (error) {
+                console.error("Fetch error:", error);
+                dataSource = "fallback";
+                return false;
+            }
+        }
+
+        function updateDataSourceIndicator() {
+            const el = document.getElementById("data-source");
+            const count = Object.keys(spacecraft).length;
+            if (dataSource === "live") {
+                const t = lastUpdate ? new Date(lastUpdate).toLocaleTimeString() : "now";
+                el.innerHTML = `<span class="status-active">◉ LIVE</span> Tracking ${count} spacecraft via JPL Horizons • ${t}`;
+                el.classList.add("live");
+            } else {
+                el.innerHTML = `<span class="warning">◎ CACHED</span> Using fallback data for ${count} spacecraft`;
+                el.classList.remove("live");
+            }
+        }
+
+        // Render dashboard card with fixed-width alignment and ASCII art
+        function renderDashboard(sc, elementId) {
+            const launch = new Date(sc.launch_date);
+            const years = ((Date.now() - launch) / (1000 * 60 * 60 * 24 * 365.25)).toFixed(1);
+            
+            const statusClass = sc.status === "TRANSMITTING" ? "status-active" : "warning";
+            const wikiUrl = wikipediaUrls[sc.id] || "#";
+            
+            const CARD_WIDTH = 42;
+            
+            function makeLine(content) {
+                const plainText = content.replace(/<[^>]*>/g, '');
+                const padding = CARD_WIDTH - plainText.length;
+                return content + ' '.repeat(Math.max(0, padding));
+            }
+            
+            const distAU = sc.distance_au.toFixed(2);
+            const distKM = (sc.distance_km / 1e9).toFixed(2);
+            const velKMS = sc.velocity_kms.toFixed(1);
+            const velAU = sc.velocity_au_yr.toFixed(2);
+            const lightMin = Math.round(sc.light_time_hours * 60);
+            
+            const ascii = spacecraftAscii[sc.id] || "";
+            const asciiLines = ascii ? ascii.split('\n').map(line => {
+                return line.padEnd(CARD_WIDTH).substring(0, CARD_WIDTH);
+            }).map(line => `║<span class="dim">${line}</span>║`).join('\n') : "";
+            
+            const line1 = makeLine(`  ${sc.symbol} ${sc.name} <span class="${statusClass}">[●]</span>`);
+            const line2 = makeLine(`  Distance: <span class="highlight">${distAU} AU</span>  (${distKM} B km)`);
+            const line3 = makeLine(`  Velocity: <span class="highlight">${velKMS} km/s</span> (${velAU} AU/yr)`);
+            const line4 = makeLine(`  Signal:   ${lightMin} min light-time`);
+            const line5 = makeLine(`  Status:   <span class="${statusClass}">${sc.status}</span>`);
+            const line6 = makeLine(`  Launched: ${sc.launch_date}  (${years} yrs ago)`);
+            const line7 = makeLine(`  Target:   ${sc.destination}`);
+            const line8 = makeLine(`  Info:     <a href="${wikiUrl}" target="_blank">Wikipedia →</a>`);
+            
+            const card = `╔════════════════════════════════════════════╗
+${asciiLines}${asciiLines ? '\n╠════════════════════════════════════════════╣\n' : ''}║${line1}║
+╠════════════════════════════════════════════╣
+║${line2}║
+║${line3}║
+║${line4}║
+║${line5}║
+╠════════════════════════════════════════════╣
+║${line6}║
+║${line7}║
+║${line8}║
+╚════════════════════════════════════════════╝`;
+            
+            document.getElementById(elementId).innerHTML = card;
+        }
+
+        // Render distance scale
+        function renderDistanceScale() {
+            const sorted = Object.values(spacecraft).sort((a, b) => a.distance_au - b.distance_au);
+            
+            let legend = "";
+            sorted.forEach(sc => {
+                legend += `${sc.symbol} ${sc.name}: ${sc.distance_au.toFixed(1)} AU   `;
+            });
+            
+            const scale = `<span class="dim">LOG SCALE: 0.1 AU ─────────────────────────────────────────────────────── 200 AU</span>
+
+<span class="warning">☉</span>─<span class="highlight">☼</span>─<span class="highlight">☿</span>─│─│─│─<span class="highlight">●</span>─────────────────────────────────────────────<span class="highlight">▸</span>───────────<span class="highlight">◇</span>───<span class="highlight">◆</span>→
+  PSP BPC  ♀ ⊕ ♂  Juno                                        NH          V2   V1
+                  (Jupiter)                                   (Kuiper)
+
+<span class="dim">  0.5 0.8  1  1.5   5.2                                        60         142  169</span>
+
+<span class="dim">${legend}</span>`;
+
+            document.getElementById("distance-scale").innerHTML = scale;
+        }
+
+        // Render velocity comparison
+        function renderVelocity() {
+            const items = Object.values(spacecraft).map(sc => ({
+                name: sc.name,
+                kms: sc.velocity_kms,
+                symbol: sc.symbol
+            })).sort((a, b) => b.kms - a.kms);
+            
+            items.push({ name: "Earth orbital velocity", kms: 29.8, symbol: "⊕", ref: true });
+            items.sort((a, b) => b.kms - a.kms);
+
+            const maxVel = Math.max(...items.map(i => i.kms)) * 1.1;
+            const barW = 30;
+            let out = "";
+            
+            items.forEach(item => {
+                const filled = Math.floor((item.kms / maxVel) * barW);
+                const bar = "█".repeat(filled) + "░".repeat(barW - filled);
+                const cls = item.ref ? "dim" : "highlight";
+                out += `${item.symbol} <span class="${cls}">${item.name.padEnd(22)}</span> ${bar} ${item.kms.toFixed(1)} km/s\n`;
+            });
+
+            document.getElementById("velocity").innerHTML = out;
+        }
+
+        // Render status grid
+        function renderStatusGrid() {
+            const time = new Date().toISOString().slice(0, 19).replace('T', ' ') + " UTC";
+            let grid = `┌────────────────────────┬───────────────┬────────────────┬─────────────┐
+│ SPACECRAFT             │ DISTANCE (AU) │ VELOCITY (km/s)│ STATUS      │
+├────────────────────────┼───────────────┼────────────────┼─────────────┤\n`;
+
+            Object.values(spacecraft).forEach(sc => {
+                const statusClass = sc.status === "TRANSMITTING" ? "status-active" : "warning";
+                const statusText = sc.status === "TRANSMITTING" ? "● ACTIVE" : "○ TRANSIT";
+                const scName = `${sc.symbol} ${sc.name}`.padEnd(22);
+                const dist = sc.distance_au.toFixed(2).padStart(11);
+                const vel = sc.velocity_kms.toFixed(1).padStart(12);
+                
+                grid += `│ ${scName} │ ${dist}   │ ${vel}   │ <span class="${statusClass}">${statusText.padEnd(11)}</span> │\n`;
+            });
+
+            grid += `└────────────────────────┴───────────────┴────────────────┴─────────────┘
+
+<span class="dim">Last update: ${time}</span>`;
+
+            document.getElementById("status-grid").innerHTML = grid;
+        }
+
+        // Render timeline
+        function renderTimeline(sc, elementId) {
+            const currentYear = new Date().getFullYear();
+            const launchYear = new Date(sc.launch_date).getFullYear();
+            const wikiUrl = wikipediaUrls[sc.id] || "#";
+            
+            let out = `<span class="dim">${launchYear}</span>                            <span class="dim">2015</span>                     <span class="dim">${currentYear}</span>    <span class="dim">→</span>
+<span class="dim">│</span>                                <span class="dim">│</span>                        <span class="dim">│</span>
+<span class="highlight">═════════════════════════════════════════════════════════════════════►</span>
+
+<span class="highlight">${sc.symbol} ${sc.name}</span>  <a href="${wikiUrl}" target="_blank">[Wikipedia]</a>
+<span class="dim">│</span>\n`;
+
+            sc.milestones.forEach((m, i) => {
+                const isLast = i === sc.milestones.length - 1;
+                const prefix = isLast ? "└─" : "├─";
+                const marker = m.highlight ? `<span class="status-active">●</span>` : `<span class="warning">●</span>`;
+                const text = m.highlight ? `<span class="status-active">${m.event}</span>` : m.event;
+                out += `<span class="dim">${prefix}</span> ${m.year} ${marker} ${text}\n`;
+            });
+
+            out += `
+<span class="dim">Current distance: ${sc.distance_au.toFixed(1)} AU from Sun</span>
+<span class="dim">Destination: ${sc.destination}</span>`;
+
+            document.getElementById(elementId).innerHTML = out;
+        }
+
+        // Render all
+        function renderAll() {
+            renderDistanceScale();
+            renderVelocity();
+            renderStatusGrid();
+            
+            Object.values(spacecraft).forEach(sc => {
+                renderDashboard(sc, `dashboard-${sc.id}`);
+                renderTimeline(sc, `timeline-${sc.id}`);
+            });
+            
+            updateDataSourceIndicator();
+        }
+
+        // Initialize
+        async function init() {
+            buildUI();
+            await fetchData();
+            renderAll();
+        }
+
+        init();
+
+        // Refresh status grid every second
+        setInterval(renderStatusGrid, 1000);
+
+        // Refresh from API every 60 seconds
+        setInterval(async () => {
+            await fetchData();
+            renderAll();
+        }, 60 * 1000);
+    </script>
+</body>
+</html>
